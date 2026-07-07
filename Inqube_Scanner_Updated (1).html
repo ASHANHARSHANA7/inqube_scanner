@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inqube Box Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+
+<!-- FIREBASE SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1F3864;--blue:#2E75B6;--blue-light:#D6E4F0;
+  --green:#00B050;--green-light:#C6EFCE;--green-dark:#375623;
+  --red:#C00000;--red-light:#FFC7CE;--red-dark:#9C0006;
+  --orange:#C55A11;--orange-light:#FCE4D6;
+  --purple:#7030A0;--purple-light:#EAD9F7;
+  --grey:#F2F2F2;--border:#D0D0D0;
+}
+body{font-family:Arial,sans-serif;font-size:13px;background:#EBEBEB;color:#1a1a1a;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* LOGIN SCREEN */
+#login-screen {
+  height:100vh;display:flex;align-items:center;justify-content:center;background:#EBEBEB;position:absolute;top:0;left:0;width:100%;z-index:99999
+}
+.login-box{background:#fff;padding:30px;border-radius:10px;box-shadow:0 2px 20px rgba(0,0,0,0.15);text-align:center;width:320px}
+.login-box h2{color:var(--navy);margin-bottom:20px}
+.auth-input{padding:12px;border:1.5px solid var(--border);border-radius:6px;margin:8px 0;width:100%;font-size:14px}
+.auth-input:focus{border-color:var(--blue)}
+.auth-btn{width:100%;padding:12px;margin:6px 0;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:14px}
+.btn-login{background:var(--blue);color:#fff}
+.btn-register{background:var(--green);color:#fff}
+.btn-logout{background:var(--red);color:#fff;padding:7px 14px}
+#auth-error{color:var(--red);margin-top:10px;font-size:12px}
+.user-info{margin-top:15px;font-size:11px;color:var(--navy)}
+
+/* TOP BAR */
+.topbar{background:var(--navy);color:#fff;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:52px;flex-shrink:0}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.topbar h1{font-size:15px;font-weight:600}
+.stage-badge{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:.5px}
+.stage-badge.s1{background:#FFC000;color:#1a1a1a}
+.stage-badge.s2{background:var(--green);color:#fff}
+.kpi-bar{display:flex;gap:2px}
+.kpi{text-align:center;padding:4px 12px;border-left:1px solid rgba(255,255,255,.2)}
+.kpi .v{font-size:17px;font-weight:700;line-height:1}
+.kpi .l{font-size:9px;opacity:.65;margin-top:2px;letter-spacing:.4px}
+.kpi.green .v{color:#70AD47}
+.kpi.orange .v{color:#FFC000}
+.kpi.red .v{color:#FF6B6B}
+.kpi.yellow .v{color:#FFD700}
+
+/* TABS */
+.tabs{background:#fff;border-bottom:2px solid var(--border);display:flex;flex-shrink:0}
+.tab{padding:9px 18px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;color:#666;margin-bottom:-2px;display:flex;align-items:center;gap:5px}
+.tab.active{border-bottom-color:var(--blue);color:var(--blue)}
+.tab .tab-badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;display:none}
+.tab .tab-badge.show{display:inline-block}
+
+/* MAIN LAYOUT */
+.main{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.pane{display:none;flex:1;overflow:hidden;flex-direction:column}
+.pane.active{display:flex}
+
+/* SCAN PANE */
+.scan-layout{display:flex;flex:1;overflow:hidden}
+.scan-left{width:320px;flex-shrink:0;display:flex;flex-direction:column;background:#fff;border-right:1px solid var(--border)}
+.scan-right{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+
+.panel-hdr{padding:8px 12px;font-size:11px;font-weight:700;letter-spacing:.6px;color:#fff;flex-shrink:0}
+.ph-navy{background:var(--navy)}
+.ph-blue{background:var(--blue)}
+.ph-green{background:#1D6B3E}
+.ph-orange{background:var(--orange)}
+.ph-purple{background:var(--purple)}
+
+/* STAGE SWITCHER */
+.stage-sw{display:flex;padding:10px;gap:6px;border-bottom:1px solid var(--border);flex-shrink:0;background:#F8F8F8}
+.stage-btn{flex:1;padding:8px;border-radius:6px;border:2px solid var(--border);font-size:11px;font-weight:700;cursor:pointer;text-align:center;transition:all .15s}
+.stage-btn.active-s1{border-color:#FFC000;background:#FFF9E6;color:#7a5a00}
+.stage-btn.active-s2{border-color:var(--green);background:#F0FFF4;color:var(--green-dark)}
+.stage-btn:not(.active-s1):not(.active-s2){background:#fff;color:#888}
+
+/* INPUT AREA */
+.input-area{padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.input-area label{font-size:10px;font-weight:700;letter-spacing:.5px;color:#666;display:block;margin-bottom:4px}
+.barcode-inp{width:100%;padding:8px 10px;font-size:13px;border:1.5px solid var(--border);border-radius:6px;outline:none}
+.barcode-inp:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(46,117,182,.15)}
+.btn-row{display:flex;gap:6px;margin-top:8px}
+.btn{padding:7px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:none;display:flex;align-items:center;justify-content:center;gap:4px;transition:all .15s}
+.btn:active{transform:scale(.97)}
+.btn-blue{background:var(--blue);color:#fff;flex:1}
+.btn-blue:hover{background:#1F5A96}
+.btn-navy{background:var(--navy);color:#fff;flex:1}
+.btn-navy:hover{background:#142847}
+.btn-red{background:var(--red);color:#fff;flex-shrink:0;padding:7px 9px}
+.btn-red:hover{background:#900}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover{background:#007A30}
+.btn-orange{background:var(--orange);color:#fff}
+.btn-grey{background:#888;color:#fff;flex:1}
+
+/* CAMERA */
+.cam-wrap{margin:0 12px 8px;border-radius:6px;overflow:hidden;background:#000;display:none;position:relative}
+.cam-wrap video{width:100%;display:block;max-height:150px;object-fit:cover}
+.cam-label{font-size:10px;color:#fff;background:rgba(0,0,0,.6);padding:3px 8px;position:absolute;bottom:0;left:0;right:0;text-align:center}
+
+/* RECENT */
+.recent-wrap{flex:1;overflow-y:auto;padding:8px}
+.ri{padding:7px 9px;border-radius:5px;margin-bottom:5px;border-left:4px solid;font-size:11px}
+.ri.green{background:var(--green-light);border-color:var(--green);color:var(--green-dark)}
+.ri.red{background:var(--red-light);border-color:var(--red);color:var(--red-dark)}
+.ri.orange{background:var(--orange-light);border-color:var(--orange);color:var(--orange)}
+.ri-top{font-weight:700;font-size:12px;display:flex;justify-content:space-between}
+.ri-sub{opacity:.75;margin-top:2px}
+
+/* RIGHT PANEL — invoice/SO table */
+.stat-bar{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.chip{padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid transparent}
+.chip-all{background:#E8EEF7;color:var(--navy)}
+.chip-ok{background:var(--green-light);color:var(--green-dark)}
+.chip-pend{background:var(--red-light);color:var(--red-dark)}
+.chip-part{background:var(--orange-light);color:var(--orange)}
+.chip.sel{border-color:currentColor}
+
+.tbl-wrap{flex:1;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:11px}
+thead th{position:sticky;top:0;background:var(--navy);color:#fff;padding:7px 8px;font-weight:600;text-align:left;white-space:nowrap;z-index:2}
+tbody tr{border-bottom:1px solid #eee}
+tbody tr:hover{background:#F5F9FF}
+tbody tr.row-done{background:#EBF9EF}
+tbody tr.row-miss{background:#FFF0F0}
+tbody tr.row-part{background:#FFF5E6}
+tbody tr.row-done td{color:var(--green-dark)}
+tbody tr.row-miss td{color:var(--red-dark)}
+tbody tr.row-part td{color:var(--orange)}
+td{padding:6px 8px;white-space:nowrap}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
+.b-done{background:var(--green);color:#fff}
+.b-miss{background:var(--red);color:#fff}
+.b-part{background:#FFC000;color:#412402}
+.b-none{background:#888;color:#fff}
+.b-over{background:var(--purple);color:#fff}
+
+/* MASTER PANE */
+.master-ctrl{padding:10px 12px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.search-inp{flex:1;min-width:160px;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:5px;outline:none}
+.search-inp:focus{border-color:var(--blue)}
+
+/* INVOICE SUMMARY PANE */
+.inv-grid{flex:1;overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;align-content:start}
+.inv-card{background:#fff;border-radius:8px;border:1.5px solid var(--border);padding:11px 13px}
+.inv-card.ic-done{border-color:var(--green);background:#F0FFF4}
+.inv-card.ic-miss{border-color:var(--red);background:#FFF0F0}
+.inv-card.ic-part{border-color:#FFC000;background:#FFFBE6}
+.inv-card.ic-wait{border-color:#ccc;background:#FAFAFA}
+.ic-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.ic-no{font-size:13px;font-weight:700}
+.ic-done .ic-no{color:var(--green-dark)}
+.ic-miss .ic-no{color:var(--red-dark)}
+.ic-part .ic-no{color:var(--orange)}
+.ic-row{display:flex;justify-content:space-between;font-size:11px;margin-top:3px;color:inherit;opacity:.85}
+.ic-row b{opacity:1;font-weight:700}
+.pbar{height:5px;border-radius:3px;background:#ddd;margin-top:7px;overflow:hidden}
+.pbar-fill{height:100%;border-radius:3px;background:var(--green);transition:width .3s}
+.ic-miss .pbar-fill{background:var(--red)}
+.ic-part .pbar-fill{background:#FFC000}
+
+/* EXPORT */
+.export-bar{padding:8px 12px;display:flex;gap:8px;border-top:1px solid var(--border);flex-shrink:0;background:#F8F8F8}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:9px 22px;border-radius:20px;font-size:12px;font-weight:600;color:#fff;z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+.t-ok{background:var(--green)}
+.t-err{background:var(--red)}
+.t-warn{background:var(--orange)}
+.t-info{background:var(--blue)}
+
+.empty{padding:40px;text-align:center;color:#aaa;font-size:13px}
+.bold{font-weight:700}
+.loading-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;z-index:99998;font-size:16px;color:var(--navy);font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <h2>📦 Inqube Box Scanner</h2>
+    <p style="margin-bottom:20px;color:#666;font-size:13px;">Firebase Connected Multi-User Edition</p>
+    <input type="email" id="auth-email" class="auth-input" placeholder="Email (e.g., indika@local.local)">
+    <input type="password" id="auth-password" class="auth-input" placeholder="Password">
+    <button onclick="registerAndLogin()" class="auth-btn btn-register">✨ Create Account & Login</button>
+    <button onclick="loginOnly()" class="auth-btn btn-login">🔐 Already Have Account</button>
+    <p id="auth-error"></p>
+    <p style="font-size:11px;color:#999;margin-top:15px;">First time? Click "Create Account"</p>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading" class="loading-overlay" style="display:none">Syncing with cloud...</div>
+
+<!-- APP CONTENT -->
+<div class="topbar" style="display:none">
+  <div class="topbar-left">
+    <span style="font-size:20px">📦</span>
+    <h1>Inqube Box Scanner</h1>
+    <span class="stage-badge s1" id="stage-badge">STAGE 1: INVOICE SCAN</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="user-info" id="user-display"></div>
+    <button onclick="doLogout()" class="btn btn-logout">Logout</button>
+  </div>
+  <div class="kpi-bar">
+    <div class="kpi"><div class="v" id="k-lines">0</div><div class="l">LINES</div></div>
+    <div class="kpi"><div class="v" id="k-inv">0</div><div class="l">INVOICES</div></div>
+    <div class="kpi yellow"><div class="v" id="k-inv-scan">0</div><div class="l">INV SCANNED</div></div>
+    <div class="kpi"><div class="v" id="k-shipqty">0</div><div class="l">SHIP QTY</div></div>
+    <div class="kpi"><div class="v" id="k-scanned">0</div><div class="l">BOX SCANNED</div></div>
+    <div class="kpi green"><div class="v" id="k-complete">0</div><div class="l">COMPLETE</div></div>
+    <div class="kpi orange"><div class="v" id="k-pending">0</div><div class="l">PENDING</div></div>
+    <div class="kpi red"><div class="v" id="k-over">0</div><div class="l">OVER</div></div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs" style="display:none">
+  <div class="tab active" data-tab="scan">🔍 Scan</div>
+  <div class="tab" data-tab="invoices">🧾 Invoice check <span class="tab-badge" id="badge-inv">0</span></div>
+  <div class="tab" data-tab="master">📋 Master data</div>
+  <div class="tab" data-tab="summary">📊 Summary</div>
+</div>
+
+<!-- MAIN -->
+<div class="main" style="display:none">
+
+  <!-- ── SCAN PANE ── -->
+  <div class="pane active" id="pane-scan">
+    <div class="scan-layout">
+
+      <!-- LEFT -->
+      <div class="scan-left">
+        <div class="panel-hdr ph-blue">⚡ SCAN STAGE</div>
+
+        <!-- Stage switch -->
+        <div class="stage-sw">
+          <div class="stage-btn active-s1" id="sw1" onclick="setStage(1)">
+            📄 STAGE 1<br><small>Scan Delivery No</small>
+          </div>
+          <div class="stage-btn" id="sw2" onclick="setStage(2)">
+            📦 STAGE 2<br><small>Scan Boxes</small>
+          </div>
+        </div>
+
+        <!-- Input -->
+        <div class="input-area">
+          <div id="loc-display" style="background:var(--purple-light); padding:8px; border-radius:6px; margin-bottom:8px; font-weight:bold; color:var(--purple); display:none; font-size:12px; border:1.5px solid var(--purple)">
+            📍 Location: <span id="current-loc-val">-</span> | Scans: <span id="current-loc-count">0</span>
+          </div>
+          <label id="inp-label">DELIVERY NO BARCODE</label>
+          <input class="barcode-inp" id="barcode-inp" placeholder="Scan or paste here..." autocomplete="off" />
+          <div class="btn-row">
+            <button class="btn btn-blue" id="btn-submit">✔ Submit</button>
+            <button class="btn btn-navy" id="btn-cam">📷 Camera</button>
+            <button class="btn btn-red" id="btn-undo" title="Undo last scan">↩</button>
+          </div>
+        </div>
+
+        <!-- Camera -->
+        <div class="cam-wrap" id="cam-wrap">
+          <video id="cam-vid" autoplay playsinline muted></video>
+          <div class="cam-label">Point at barcode / QR</div>
+        </div>
+
+        <!-- Recent -->
+        <div class="panel-hdr ph-green">🕐 RECENT SCANS</div>
+        <div class="recent-wrap" id="recent-wrap">
+          <div class="empty">No scans yet</div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="scan-right">
+        <div class="panel-hdr ph-navy" id="right-hdr">📋 SO# LINES — load master data to begin</div>
+        <div class="stat-bar" id="stat-bar">
+          <span class="chip chip-all sel" data-f="all" id="chip-all">All (0)</span>
+          <span class="chip chip-ok"  data-f="done" id="chip-done">Complete (0)</span>
+          <span class="chip chip-part" data-f="part" id="chip-part">In progress (0)</span>
+          <span class="chip chip-pend" data-f="wait" id="chip-wait">Not started (0)</span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SO# + Line No#</th>
+                <th>Delivery No</th>
+                <th>Invoice No</th>
+                <th>Item</th>
+                <th>Ship Qty</th>
+                <th>Box Scanned</th>
+                <th>Variance</th>
+                <th>Inv Arrived?</th>
+                <th>Box Status</th>
+              </tr>
+            </thead>
+            <tbody id="so-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── INVOICE CHECK PANE ── -->
+  <div class="pane" id="pane-invoices">
+    <div class="panel-hdr ph-orange">🧾 DELIVERY NO — PHYSICAL ARRIVAL CHECK</div>
+    <div class="stat-bar">
+      <span class="chip chip-ok sel" data-if="all" id="ichip-all">All</span>
+      <span class="chip chip-ok" data-if="arrived">✅ Arrived</span>
+      <span class="chip chip-pend" data-if="missing">❌ Not arrived</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Delivery No</th>
+            <th>Invoice No</th>
+            <th>RBO</th>
+            <th>SO# Lines</th>
+            <th>Total Ship Qty</th>
+            <th>Scanned Time</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="inv-tbody"></tbody>
+      </table>
+    </div>
+    <div class="export-bar">
+      <button class="btn btn-green" onclick="exportInvoiceCSV()">⬇ Export Invoice Check CSV</button>
+    </div>
+  </div>
+
+  <!-- ── MASTER DATA PANE ── -->
+  <div class="pane" id="pane-master">
+    <div class="panel-hdr ph-navy">📋 MASTER SHIPMENT DATA</div>
+    <div class="master-ctrl">
+      <button class="btn btn-blue" onclick="document.getElementById('file-inp').click()">⬆ Load Supplier xlsx</button>
+      <input type="file" id="file-inp" accept=".xlsx,.xls,.csv" style="display:none" />
+      <input class="search-inp" id="msearch" placeholder="Search SO#, delivery, invoice, item..." />
+      <button class="btn btn-red" onclick="clearAll()">🗑 Clear all</button>
+      <button class="btn btn-green" onclick="exportMasterCSV()">⬇ Export Master + Status</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>SO# + Line No#</th><th>Delivery No</th><th>RBO</th>
+            <th>Customer PO</th><th>Invoice No</th><th>Ordered Item</th>
+            <th>Order Qty</th><th>Ship Qty</th><th>Cartons</th>
+            <th>Inv Arrived</th><th>Box Status</th>
+          </tr>
+        </thead>
+        <tbody id="master-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY PANE ── -->
+  <div class="pane" id="pane-summary">
+    <div class="panel-hdr ph-purple">📊 INVOICE-WISE UNLOADING SUMMARY</div>
+    <div class="inv-grid" id="inv-grid">
+      <div class="empty" style="grid-column:1/-1">Load master data to see summary</div>
+    </div>
+    <div class="export-bar">
+      <button class="btn btn-green" onclick="exportScanCSV()">⬇ Export Scan Log CSV</button>
+      <button class="btn btn-blue" onclick="exportMasterCSV()">⬇ Export Master + Status</button>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<div class="toast" id="toast"></div>
+
+<!-- MAIN JAVASCRIPT -->
+<script>
+// ═══════════════════════════════════════════════════════
+// FIREBASE CONFIGURATION (YOUR VALUES)
+// ═══════════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyCPpAviGp_vsNNsfSz2m_Li8I81yMIXPdg",
+  authDomain: "inquibescan.firebaseapp.com",
+  projectId: "inquibescan",
+  storageBucket: "inquibescan.firebasestorage.app",
+  messagingSenderId: "3201551773",
+  appId: "1:3201551773:web:9786663a400f6a8e077374",
+  measurementId: "G-21R0HBYM9R"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const S = {
+  master: [],       // parsed rows from xlsx
+  invScans: {},     // { deliveryNo: { time, raw } }
+  boxScans: [],     // [ { soKey, qty, raw, time } ]
+  history: [],      // undo stack (snapshots)
+  stage: 1,
+  filter: 'all',
+  currentLocation: '',
+  camActive: false,
+  camStream: null,
+  camTimer: null,
+  currentUser: null,
+  realTimeListener: null
+};
+
+// Show/hide loading overlay
+function setLoading(show) {
+  document.getElementById('loading').style.display = show ? 'flex' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════
+// AUTHENTICATION
+// ═══════════════════════════════════════════════════════
+auth.onAuthStateChanged(async (user) => {
+  if (user) {
+    S.currentUser = user;
+    document.getElementById('user-display').textContent = '👤 ' + user.email;
+    document.getElementById('login-screen').style.display = 'none';
+    document.querySelector('.topbar').style.display = 'flex';
+    document.querySelector('.tabs').style.display = 'flex';
+    document.querySelector('.main').style.display = 'flex';
+    
+    showToast('Connected to Firebase: ' + user.email.split('@')[0], 'ok');
+    await loadDataFromFirebase(user.uid);
+    startRealTimeSync(user.uid);
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+});
+
+async function registerAndLogin() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  
+  if (!email || !password) {
+    document.getElementById('auth-error').textContent = 'Please enter both email and password';
+    return;
+  }
+  
+  try {
+    setLoading(true);
+    await auth.createUserWithEmailAndPassword(email, password);
+    showToast('Account created successfully!', 'ok');
+  } catch(error) {
+    if (error.code === 'auth/email-already-in-use') {
+      // User exists - just log in
+      setLoading(false);
+      document.getElementById('auth-error').textContent = 'Account exists. Logging you in...';
+      await auth.signInWithEmailAndPassword(email, password);
+      showToast('Welcome back!', 'ok');
+    } else {
+      setLoading(false);
+      document.getElementById('auth-error').textContent = error.message;
+    }
+  }
+}
+
+async function loginOnly() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  
+  if (!email || !password) {
+    document.getElementById('auth-error').textContent = 'Please enter both email and password';
+    return;
+  }
+  
+  try {
+    setLoading(true);
+    await auth.signInWithEmailAndPassword(email, password);
+    showToast('Logged in successfully!', 'ok');
+  } catch(error) {
+    setLoading(false);
+    document.getElementById('auth-error').textContent = error.message;
+  }
+}
+
+async function doLogout() {
+  if(confirm('Logout from your account?')) {
+    await auth.signOut();
+    location.reload();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// FIRESTORE DATA PERSISTENCE
+// ═══════════════════════════════════════════════════════
+async function save() {
+  if (!S.currentUser) return;
+  try {
+    setLoading(true);
+    await db.collection('inqube_data').doc(S.currentUser.uid).set({
+      master: S.master,
+      invScans: S.invScans,
+      boxScans: S.boxScans,
+      currentLocation: S.currentLocation,
+      lastUpdated: new Date().toISOString()
+    }, { merge: true });
+    setLoading(false);
+  } catch(error) {
+    console.error('Save error:', error);
+    setLoading(false);
+    showToast('Connection lost - working offline', 'warn');
+  }
+}
+
+async function loadDataFromFirebase(userId) {
+  try {
+    setLoading(true);
+    const doc = await db.collection('inqube_data').doc(userId).get();
+    setLoading(false);
+    
+    if (doc.exists) {
+      const data = doc.data();
+      S.master = data.master || [];
+      S.invScans = data.invScans || {};
+      S.boxScans = data.boxScans || [];
+      S.currentLocation = data.currentLocation || '';
+      renderAll();
+      showToast('Cloud data loaded', 'ok');
+    } else {
+      showToast('Starting fresh session', 'info');
+    }
+  } catch(error) {
+    console.error('Load error:', error);
+    setLoading(false);
+    showToast('Offline mode active', 'warn');
+  }
+}
+
+let isLocalChangePending = false;
+
+function startRealTimeSync(userId) {
+  if (S.realTimeListener) S.realTimeListener();
+  
+  S.realTimeListener = db.collection('inqube_data').doc(userId).onSnapshot((snapshot) => {
+    if (snapshot.exists && !isLocalChangePending) {
+      const data = snapshot.data();
+      S.master = data.master || [];
+      S.invScans = data.invScans || {};
+      S.boxScans = data.boxScans || [];
+      S.currentLocation = data.currentLocation || '';
+      renderAll();
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// XLSX PARSER
+// ═══════════════════════════════════════════════════════
+document.getElementById('file-inp').addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+
+  reader.onload = async function(e) {
+    try {
+      let rows = [];
+      if (ext === 'csv' || ext === 'txt') {
+        rows = parseCSV(e.target.result);
+      } else {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      }
+      processMasterRows(rows);
+      await save(); // Save to Firebase
+    } catch(err) {
+      showToast('Error reading file: ' + err.message, 'err');
+    }
+  };
+
+  if (ext === 'csv' || ext === 'txt') {
+    reader.readAsText(file);
+  } else {
+    reader.readAsArrayBuffer(file);
+  }
+  this.value = '';
+});
+
+function parseCSV(text) {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim());
+  return lines.slice(1).map(line => {
+    const cols = line.split(',').map(c => c.replace(/"/g,'').trim());
+    const obj = {};
+    headers.forEach((h,i) => obj[h] = cols[i]||'');
+    return obj;
+  });
+}
+
+function norm(s){ return String(s||'').toLowerCase().trim(); }
+
+function processMasterRows(rows) {
+  if (!rows || rows.length === 0) { showToast('No data found in file', 'err'); return; }
+
+  const keys = Object.keys(rows[0]);
+  function findCol(...patterns) {
+    for (const p of patterns) {
+      const k = keys.find(k => norm(k).includes(p));
+      if (k) return k;
+    }
+    return null;
+  }
+
+  const COL = {
+    so:       findCol('so# + line','so#+line','so# +','line no#','so#') || keys[0],
+    delivery: findCol('delivery no','delivery'),
+    rbo:      findCol('rbo'),
+    cpo:      findCol('customer po','cust po','po no'),
+    invoice:  findCol('invoice no','invoice'),
+    item:     findCol('ordered item','item','sku'),
+    orderQty: findCol('order qty','order q','ordered q'),
+    shipQty:  findCol('ship qty','ship q','shipped q'),
+    cartons:  findCol('carton'),
+  };
+
+  const parsed = rows.map(r => ({
+    soKey:      String(r[COL.so]||'').trim(),
+    deliveryNo: String(r[COL.delivery]||'').trim(),
+    rbo:        String(r[COL.rbo]||'').trim(),
+    cpo:        String(r[COL.cpo]||'').trim(),
+    invoice:    String(r[COL.invoice]||'').trim(),
+    item:       String(r[COL.item]||'').trim(),
+    orderQty:   parseInt(r[COL.orderQty]||0,10)||0,
+    shipQty:    parseInt(r[COL.shipQty]||0,10)||0,
+    cartons:    String(r[COL.cartons]||'').trim(),
+  })).filter(r => r.soKey && r.soKey !== 'undefined');
+
+  if (parsed.length === 0) { showToast('Could not parse any SO# rows', 'err'); return; }
+
+  S.master = parsed;
+  renderAll();
+}
+
+// ═══════════════════════════════════════════════════════
+// SCAN LOGIC
+// ═══════════════════════════════════════════════════════
+function setStage(n) {
+  S.stage = n;
+  document.getElementById('sw1').className = 'stage-btn' + (n===1?' active-s1':'');
+  document.getElementById('sw2').className = 'stage-btn' + (n===2?' active-s2':'');
+  document.getElementById('stage-badge').textContent = n===1 ? 'STAGE 1: INVOICE SCAN' : 'STAGE 2: BOX SCAN';
+  document.getElementById('stage-badge').className = 'stage-badge ' + (n===1?'s1':'s2');
+  document.getElementById('inp-label').textContent = n===1 ? 'DELIVERY NO BARCODE' : 'BOX BARCODE (SO#+Company+Location+Qty)';
+  document.getElementById('barcode-inp').placeholder = n===1 ? 'Scan delivery note barcode...' : 'Scan box barcode...';
+  document.getElementById('barcode-inp').focus();
+}
+
+async function submitScan() {
+  const raw = document.getElementById('barcode-inp').value.trim();
+  if (!raw) return;
+
+  // snapshot for undo
+  S.history.push({ invScans: JSON.stringify(S.invScans), boxScans: JSON.stringify(S.boxScans) });
+  if (S.history.length > 50) S.history.shift();
+
+  isLocalChangePending = true;
+  setTimeout(() => { isLocalChangePending = false; }, 500);
+
+  if (S.stage === 1) {
+    scanInvoice(raw);
+  } else {
+    scanBox(raw);
+  }
+  document.getElementById('barcode-inp').value = '';
+  document.getElementById('barcode-inp').focus();
+  
+  await save(); // Sync to Firebase
+}
+
+function scanInvoice(raw) {
+  const clean = raw.trim();
+  
+  // Check for duplicate scan
+  const isDuplicate = Object.values(S.invScans).some(s => s.raw === clean);
+  if (isDuplicate) {
+    showToast('Duplicate Invoice Scan: ' + clean, 'err');
+    return;
+  }
+
+  const match = S.master.find(r => r.deliveryNo && (r.deliveryNo === clean || clean.includes(r.deliveryNo) || r.deliveryNo.includes(clean)));
+  const delNo = match ? match.deliveryNo : clean;
+
+  if (!match && S.master.length > 0) {
+    showToast('Delivery No "' + clean + '" not in master', 'warn');
+  }
+
+  S.invScans[delNo] = { time: timeNow(), raw };
+  renderAll();
+}
+
+function scanBox(raw) {
+  const clean = raw.trim();
+  
+  // Location Scan Detection (starts with 'R')
+  if (clean.toUpperCase().startsWith('R')) {
+    S.currentLocation = clean.toUpperCase();
+    showToast('Location set to: ' + S.currentLocation, 'ok');
+    renderAll();
+    return;
+  }
+
+  if (!S.currentLocation) {
+    showToast('Please scan a location (starting with "R") first', 'warn');
+    return;
+  }
+
+  // Check for duplicate box barcode
+  const isDuplicate = S.boxScans.some(s => s.raw === clean);
+  if (isDuplicate) {
+    showToast('Duplicate Box Barcode: ' + clean, 'err');
+    return;
+  }
+
+  const parts = clean.split('+');
+  if (parts.length < 2) {
+    showToast('Scan the location', 'err');
+    return;
+  }
+  const soKey = parts[0].trim();
+  const lastPart = parts[parts.length - 1].trim();
+  const qty = parseInt(lastPart, 10);
+
+  if (!soKey || isNaN(qty) || qty <= 0) {
+    showToast('Cannot read SO# or qty from barcode', 'err');
+    return;
+  }
+
+  const master = S.master.find(r => r.soKey === soKey);
+  if (!master && S.master.length > 0) {
+    showToast('SO# ' + soKey + ' not in master', 'warn');
+  }
+
+  S.boxScans.push({ soKey, qty, raw, time: timeNow(), location: S.currentLocation });
+  renderAll();
+
+  const totals = getBoxTotals();
+  const total = totals[soKey] || 0;
+  const shipQty = master ? master.shipQty : 0;
+  if (master && total >= shipQty && shipQty > 0) {
+    showToast('✅ COMPLETE: ' + soKey + ' (' + total + '/' + shipQty + ')', 'ok');
+  } else {
+    showToast('+' + qty + ' → ' + soKey + ' (' + total + '/' + (shipQty||'?') + ')', 'info');
+  }
+}
+
+function undoLast() {
+  if (S.history.length === 0) { showToast('Nothing to undo', 'warn'); return; }
+  isLocalChangePending = true;
+  setTimeout(() => { isLocalChangePending = false; }, 500);
+  
+  const snap = S.history.pop();
+  S.invScans = JSON.parse(snap.invScans);
+  S.boxScans = JSON.parse(snap.boxScans);
+  renderAll();
+  save();
+  showToast('Last scan undone', 'warn');
+}
+
+function getBoxTotals() {
+  const t = {};
+  for (const sc of S.boxScans) t[sc.soKey] = (t[sc.soKey]||0) + sc.qty;
+  return t;
+}
+
+function getInvStatus(delNo) {
+  return S.invScans[delNo] ? 'arrived' : 'missing';
+}
+
+function getBoxStatus(scanned, shipQty) {
+  if (shipQty <= 0) return 'none';
+  if (scanned === 0) return 'wait';
+  if (scanned > shipQty) return 'over';
+  if (scanned >= shipQty) return 'done';
+  return 'part';
+}
+
+function timeNow() {
+  return new Date().toLocaleTimeString();
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════════
+let renderTimer = null;
+function renderAll() {
+  if (renderTimer) cancelAnimationFrame(renderTimer);
+  renderTimer = requestAnimationFrame(() => {
+    renderKPIs();
+    renderSOTable();
+    renderInvoiceTable();
+    renderMasterTable();
+    renderSummaryCards();
+    renderRecent();
+    updateInvBadge();
+    renderLocationDisplay();
+  });
+}
+
+function renderLocationDisplay() {
+  const el = document.getElementById('loc-display');
+  if (S.stage === 2 && S.currentLocation) {
+    el.style.display = 'block';
+    document.getElementById('current-loc-val').textContent = S.currentLocation;
+    const count = S.boxScans.filter(sc => sc.location === S.currentLocation).length;
+    document.getElementById('current-loc-count').textContent = count;
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function renderKPIs() {
+  const totals = getBoxTotals();
+  const lines = S.master.length;
+  const shipQty = S.master.reduce((a,r)=>a+(r.shipQty||0),0);
+  const boxScanned = Object.values(totals).reduce((a,v)=>a+v,0);
+  const uniqueInvs = [...new Set(S.master.map(r=>r.deliveryNo).filter(Boolean))];
+  const invCount = uniqueInvs.length;
+  const invScanned = uniqueInvs.filter(d=>S.invScans[d]).length;
+  let complete=0,pending=0,over=0;
+  for (const r of S.master) {
+    const s = getBoxStatus(totals[r.soKey]||0, r.shipQty||0);
+    if (s==='done') complete++;
+    else if (s==='wait') pending++;
+    else if (s==='over') over++;
+  }
+  setText('k-lines', lines);
+  setText('k-inv', invCount);
+  setText('k-inv-scan', invScanned + '/' + invCount);
+  setText('k-shipqty', shipQty.toLocaleString());
+  setText('k-scanned', boxScanned.toLocaleString());
+  setText('k-complete', complete);
+  setText('k-pending', pending);
+  setText('k-over', over);
+}
+
+function renderSOTable() {
+  const totals = getBoxTotals();
+  const tbody = document.getElementById('so-tbody');
+  if (!S.master.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">Load master data to begin</td></tr>';
+    return;
+  }
+  const f = S.filter;
+  let rows = S.master.map(r => {
+    const sc = totals[r.soKey]||0;
+    const bs = getBoxStatus(sc, r.shipQty||0);
+    const ia = getInvStatus(r.deliveryNo);
+    return { r, sc, bs, ia };
+  });
+
+  const all = rows.length;
+  const done = rows.filter(x=>x.bs==='done').length;
+  const part = rows.filter(x=>x.bs==='part'||x.bs==='over').length;
+  const wait = rows.filter(x=>x.bs==='wait'||x.bs==='none').length;
+  setText('chip-all','All ('+all+')');
+  setText('chip-done','Complete ('+done+')');
+  setText('chip-part','In progress ('+part+')');
+  setText('chip-wait','Not started ('+wait+')');
+
+  if (f!=='all') rows = rows.filter(x => {
+    if (f==='done') return x.bs==='done';
+    if (f==='part') return x.bs==='part'||x.bs==='over';
+    if (f==='wait') return x.bs==='wait'||x.bs==='none';
+    return true;
+  });
+
+  if (!rows.length) { tbody.innerHTML='<tr><td colspan="9" class="empty">No rows match filter</td></tr>'; return; }
+
+  tbody.innerHTML = rows.map(({r,sc,bs,ia})=>{
+    const v = sc-(r.shipQty||0);
+    const rowCls = bs==='done'?'row-done':bs==='over'?'row-miss':bs==='part'?'row-part':'';
+    const bBadge = bs==='done'?'<span class="badge b-done">COMPLETE</span>'
+      :bs==='over'?'<span class="badge b-over">OVER</span>'
+      :bs==='part'?'<span class="badge b-part">IN PROGRESS</span>'
+      :bs==='wait'?'<span class="badge b-none">NOT STARTED</span>'
+      :'<span class="badge b-none">—</span>';
+    const iaBadge = ia==='arrived'?'<span class="badge b-done">✅ YES</span>':'<span class="badge b-miss">❌ NO</span>';
+    return `<tr class="${rowCls}">
+      <td class="bold">${r.soKey}</td>
+      <td>${r.deliveryNo}</td>
+      <td>${r.invoice}</td>
+      <td>${r.item}</td>
+      <td>${(r.shipQty||0).toLocaleString()}</td>
+      <td class="bold">${sc.toLocaleString()}</td>
+      <td class="bold" style="color:${v===0?'inherit':v>0?'var(--red-dark)':'var(--green-dark)'}">${v===0?'0':v>0?'+'+v:v}</td>
+      <td>${iaBadge}</td>
+      <td>${bBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderInvoiceTable() {
+  const totals = getBoxTotals();
+  const tbody = document.getElementById('inv-tbody');
+
+  const groups = {};
+  for (const r of S.master) {
+    const d = r.deliveryNo || '(unknown)';
+    if (!groups[d]) groups[d] = { deliveryNo:d, invoice:r.invoice, rbo:r.rbo, lines:0, shipQty:0 };
+    groups[d].lines++;
+    groups[d].shipQty += r.shipQty||0;
+  }
+
+  for (const d of Object.keys(S.invScans)) {
+    if (!groups[d]) groups[d] = { deliveryNo:d, invoice:'(not in master)', rbo:'', lines:0, shipQty:0 };
+  }
+
+  const rows = Object.values(groups);
+  if (!rows.length) { tbody.innerHTML='<tr><td colspan="7" class="empty">Load master data first</td></tr>'; return; }
+
+  const missing = rows.filter(g=>!S.invScans[g.deliveryNo]).length;
+  document.getElementById('badge-inv').textContent = missing;
+  document.getElementById('badge-inv').className = 'tab-badge' + (missing>0?' show':'');
+
+  tbody.innerHTML = rows.map(g => {
+    const arrived = !!S.invScans[g.deliveryNo];
+    const sc = S.invScans[g.deliveryNo];
+    const rowCls = arrived?'row-done':'row-miss';
+    const badge = arrived?'<span class="badge b-done">✅ ARRIVED</span>':'<span class="badge b-miss">❌ NOT ARRIVED</span>';
+    return `<tr class="${rowCls}">
+      <td class="bold">${g.deliveryNo}</td>
+      <td>${g.invoice}</td>
+      <td>${g.rbo}</td>
+      <td>${g.lines}</td>
+      <td>${g.shipQty.toLocaleString()}</td>
+      <td>${sc?sc.time:''}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderMasterTable() {
+  const totals = getBoxTotals();
+  const q = (document.getElementById('msearch').value||'').toLowerCase();
+  let rows = S.master;
+  if (q) rows = rows.filter(r=>(r.soKey+r.deliveryNo+r.invoice+r.item+r.rbo).toLowerCase().includes(q));
+
+  const tbody = document.getElementById('master-tbody');
+  if (!rows.length) {
+    tbody.innerHTML=`<tr><td colspan="12" class="empty">${S.master.length===0?'No master data loaded. Click "Load Supplier xlsx" above.':'No results for "'+q+'"'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map((r,i)=>{
+    const sc = totals[r.soKey]||0;
+    const bs = getBoxStatus(sc,r.shipQty||0);
+    const ia = getInvStatus(r.deliveryNo);
+    const bBadge = bs==='done'?'<span class="badge b-done">COMPLETE</span>'
+      :bs==='over'?'<span class="badge b-over">OVER</span>'
+      :bs==='part'?'<span class="badge b-part">PENDING</span>'
+      :'<span class="badge b-none">PENDING</span>';
+    const iaBadge = ia==='arrived'?'<span class="badge b-done">YES</span>':'<span class="badge b-miss">NO</span>';
+    return `<tr>
+      <td>${i+1}</td>
+      <td class="bold">${r.soKey}</td>
+      <td>${r.deliveryNo}</td>
+      <td>${r.rbo}</td>
+      <td>${r.cpo}</td>
+      <td>${r.invoice}</td>
+      <td>${r.item}</td>
+      <td>${(r.orderQty||0).toLocaleString()}</td>
+      <td class="bold">${(r.shipQty||0).toLocaleString()}</td>
+      <td>${r.cartons}</td>
+      <td>${iaBadge}</td>
+      <td>${bBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSummaryCards() {
+  const totals = getBoxTotals();
+  const el = document.getElementById('inv-grid');
+
+  const inv = {};
+  for (const r of S.master) {
+    const k = r.invoice || '(no invoice)';
+    const d = r.deliveryNo;
+    if (!inv[k]) inv[k] = { invoice:k, deliveryNo:d, lines:0, shipQty:0, scanned:0, arrived:false };
+    inv[k].lines++;
+    inv[k].shipQty += r.shipQty||0;
+    inv[k].scanned += totals[r.soKey]||0;
+    if (S.invScans[d]) inv[k].arrived = true;
+  }
+
+  const cards = Object.values(inv);
+  if (!cards.length) { el.innerHTML='<div class="empty" style="grid-column:1/-1">Load master data to see summary</div>'; return; }
+
+  el.innerHTML = cards.map(c=>{
+    const pct = c.shipQty>0 ? Math.min(100,Math.round(c.scanned/c.shipQty*100)) : 0;
+    const v = c.scanned - c.shipQty;
+    const done = c.scanned >= c.shipQty && c.shipQty > 0;
+    const over = c.scanned > c.shipQty;
+    const part = c.scanned > 0 && !done;
+    const cls = over ? 'ic-part' : (done ? 'ic-done' : (part ? 'ic-part' : 'ic-miss'));
+    return `<div class="inv-card ${cls}">
+      <div class="ic-top">
+        <div class="ic-no">Inv: ${c.invoice}</div>
+        ${c.arrived?'<span class="badge b-done">✅</span>':'<span class="badge b-miss">❌</span>'}
+      </div>
+      <div class="ic-row"><span>Delivery No</span><b>${c.deliveryNo}</b></div>
+      <div class="ic-row"><span>SO lines</span><b>${c.lines}</b></div>
+      <div class="ic-row"><span>Ship qty</span><b>${c.shipQty.toLocaleString()}</b></div>
+      <div class="ic-row"><span>Box scanned</span><b>${c.scanned.toLocaleString()}</b></div>
+      <div class="ic-row"><span>Variance</span><b style="color:${v===0?'inherit':v>0?'var(--red-dark)':'var(--green-dark)'}">${v===0?'0':v>0?'+'+v:v}</b></div>
+      <div class="ic-row"><span>Progress</span><b>${pct}%</b></div>
+      <div class="pbar"><div class="pbar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderRecent() {
+  const el = document.getElementById('recent-wrap');
+  const totals = getBoxTotals();
+
+  const recentInv = Object.entries(S.invScans).map(([d,sc])=>({ type:'inv', key:d, time:sc.time, qty:null }));
+  const recentBox = S.boxScans.map(sc=>({ type:'box', key:sc.soKey, time:sc.time, qty:sc.qty }));
+  const all = [...recentInv, ...recentBox].slice(-30).reverse();
+
+  if (!all.length) { el.innerHTML='<div class="empty">No scans yet</div>'; return; }
+  el.innerHTML = all.map(sc=>{
+    if (sc.type==='inv') {
+      const inMaster = S.master.some(r=>r.deliveryNo===sc.key);
+      return `<div class="ri green">
+        <div class="ri-top"><span>📄 ${sc.key}</span><span>${sc.time}</span></div>
+        <div class="ri-sub">Delivery No ${inMaster?'✅ matched in master':'⚠ not in master'}</div>
+      </div>`;
+    } else {
+      const master = S.master.find(r=>r.soKey===sc.key);
+      const total = totals[sc.key]||0;
+      const shipQty = master?master.shipQty:0;
+      const done = shipQty>0 && total>=shipQty;
+      const over = shipQty>0 && total>shipQty;
+      const cls = over ? 'orange' : (done ? 'green' : 'red');
+      return `<div class="ri ${cls}">
+        <div class="ri-top"><span>📦 ${sc.key}</span><span>${sc.time}</span></div>
+        <div class="ri-sub">+${sc.qty} boxes | Total: ${total}/${shipQty||'?'}</div>
+      </div>`;
+    }
+  }).join('');
+}
+
+function updateInvBadge() {
+  const groups = {};
+  for (const r of S.master) if(r.deliveryNo) groups[r.deliveryNo]=1;
+  const missing = Object.keys(groups).filter(d=>!S.invScans[d]).length;
+  const b = document.getElementById('badge-inv');
+  b.textContent = missing;
+  b.className = 'tab-badge'+(missing>0?' show':'');
+}
+
+// ═══════════════════════════════════════════════════════
+// EXPORTS
+// ═══════════════════════════════════════════════════════
+function toCSV(headers, rows) {
+  return [headers, ...rows].map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(',')).join('\n');
+}
+function downloadCSV(filename, content) {
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
+  a.download = filename;
+  a.click();
+}
+
+function exportMasterCSV() {
+  if (!S.master.length) { showToast('No master data to export', 'warn'); return; }
+  const totals = getBoxTotals();
+  
+  // Prepare breakdown headers
+  const allLocations = [...new Set(S.boxScans.map(sc => sc.location).filter(Boolean))].sort();
+  const hdrs = [
+    'SO# + Line No#', 'Delivery No', 'RBO', 'Customer PO', 'Invoice No', 
+    'Ordered Item', 'Order Qty', 'Ship Qty', 'Cartons', 'Invoice Arrived', 
+    'Scanned Qty', 'Variance', 'Box Status', 'Box Count', 'Box Qty Breakdown',
+    ...allLocations.map(l => 'Loc: ' + l)
+  ];
+  
+  const rows = S.master.map(r=>{
+    const sc = totals[r.soKey]||0;
+    const bs = getBoxStatus(sc,r.shipQty||0);
+    const ia = getInvStatus(r.deliveryNo);
+    
+    // Get all box scans for this SO
+    const soScans = S.boxScans.filter(s => s.soKey === r.soKey);
+    const boxCount = soScans.length;
+    
+    // Detailed box breakdown: qty*1+qty*1
+    const boxQtyBreakdown = soScans.map(s => `${s.qty}*1`).join('+');
+    
+    // Calculate breakdown per location for this SO
+    const breakdown = allLocations.map(loc => {
+      const locScans = soScans.filter(s => s.location === loc);
+      const locQty = locScans.reduce((sum, s) => sum + s.qty, 0);
+      const locBoxCount = locScans.length;
+      return `${locQty} (${locBoxCount} boxes)`;
+    });
+
+    return [
+      r.soKey, r.deliveryNo, r.rbo, r.cpo, r.invoice, 
+      r.item, r.orderQty, r.shipQty, r.cartons, ia==='arrived'?'YES':'NO', 
+      sc, sc-(r.shipQty||0), bs.toUpperCase(), boxCount, boxQtyBreakdown,
+      ...breakdown
+    ];
+  });
+  downloadCSV('Inqube_Master_Status_'+dateStamp()+'.csv', toCSV(hdrs,rows));
+  showToast('Master export downloaded', 'ok');
+}
+
+function exportScanCSV() {
+  const totals = getBoxTotals();
+  const hdrs = ['SO# + Line No#','Location','Box Qty (this scan)','Running Total','Ship Qty','Status','Scan Time','Raw Barcode'];
+  const rows = S.boxScans.map(sc=>{
+    const master = S.master.find(r=>r.soKey===sc.soKey);
+    const total = totals[sc.soKey]||0;
+    const bs = getBoxStatus(total,master?master.shipQty:0);
+    return [sc.soKey,sc.location||'',sc.qty,total,master?master.shipQty:'',bs.toUpperCase(),sc.time,sc.raw];
+  });
+  downloadCSV('Inqube_ScanLog_'+dateStamp()+'.csv', toCSV(hdrs,rows));
+  showToast('Scan log exported', 'ok');
+}
+
+function exportInvoiceCSV() {
+  const hdrs = ['Delivery No','Invoice No','RBO','SO Lines','Total Ship Qty','Arrived','Scan Time'];
+  const groups = {};
+  for (const r of S.master) {
+    const d = r.deliveryNo||'(unknown)';
+    if (!groups[d]) groups[d]={deliveryNo:d,invoice:r.invoice,rbo:r.rbo,lines:0,shipQty:0};
+    groups[d].lines++;
+    groups[d].shipQty+=r.shipQty||0;
+  }
+  const rows = Object.values(groups).map(g=>{
+    const sc=S.invScans[g.deliveryNo];
+    return [g.deliveryNo,g.invoice,g.rbo,g.lines,g.shipQty,sc?'YES':'NO',sc?sc.time:''];
+  });
+  downloadCSV('Inqube_InvoiceCheck_'+dateStamp()+'.csv', toCSV(hdrs,rows));
+  showToast('Invoice check exported', 'ok');
+}
+
+function dateStamp() {
+  const d=new Date();
+  return d.getFullYear()+''+(d.getMonth()+1+'').padStart(2,'0')+(d.getDate()+'').padStart(2,'0');
+}
+
+// ═══════════════════════════════════════════════════════
+// CAMERA
+// ═══════════════════════════════════════════════════════
+async function toggleCamera() {
+  if (S.camActive) { stopCamera(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment', width:640 } });
+    S.camStream = stream;
+    S.camActive = true;
+    const vid = document.getElementById('cam-vid');
+    vid.srcObject = stream;
+    document.getElementById('cam-wrap').style.display = 'block';
+    document.getElementById('btn-cam').textContent = '⛔ Stop';
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    S.camTimer = setInterval(()=>{
+      if (vid.readyState!==vid.HAVE_ENOUGH_DATA) return;
+      canvas.width=vid.videoWidth; canvas.height=vid.videoHeight;
+      ctx.drawImage(vid,0,0);
+      const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+      const code=jsQR(img.data,img.width,img.height);
+      if (code&&code.data) {
+        document.getElementById('barcode-inp').value=code.data;
+        stopCamera();
+        submitScan();
+      }
+    }, 250);
+  } catch(e) { showToast('Camera error: '+e.message,'err'); }
+}
+
+function stopCamera() {
+  if (S.camStream) { S.camStream.getTracks().forEach(t=>t.stop()); S.camStream=null; }
+  clearInterval(S.camTimer);
+  S.camActive=false;
+  document.getElementById('cam-wrap').style.display='none';
+  document.getElementById('cam-vid').srcObject=null;
+  document.getElementById('btn-cam').textContent='📷 Camera';
+}
+
+// ═══════════════════════════════════════════════════════
+// MISC
+// ═══════════════════════════════════════════════════════
+async function clearAll() {
+  if (!confirm('Clear ALL data including master, scans, and invoice checks?')) return;
+  isLocalChangePending = true;
+  setTimeout(() => { isLocalChangePending = false; }, 500);
+  
+  S.master=[]; S.invScans={}; S.boxScans=[]; S.history=[];
+  renderAll();
+  save();
+  showToast('All data cleared','warn');
+}
+
+function showToast(msg,type='info') {
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast show t-'+type;
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.className='toast',2500);
+}
+
+function setText(id,val) {
+  const el=document.getElementById(id);
+  if(el) el.textContent=val;
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('pane-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+// Chips
+document.querySelectorAll('[data-f]').forEach(chip=>{
+  chip.addEventListener('click',()=>{
+    S.filter=chip.dataset.f;
+    document.querySelectorAll('[data-f]').forEach(c=>c.classList.remove('sel'));
+    chip.classList.add('sel');
+    renderSOTable();
+  });
+});
+
+// Buttons
+document.getElementById('btn-submit').addEventListener('click', submitScan);
+document.getElementById('barcode-inp').addEventListener('keydown',e=>{ if(e.key==='Enter') submitScan(); });
+document.getElementById('btn-undo').addEventListener('click', undoLast);
+document.getElementById('btn-cam').addEventListener('click', toggleCamera);
+document.getElementById('msearch').addEventListener('input', renderMasterTable);
+</script>
+</body>
+</html>
