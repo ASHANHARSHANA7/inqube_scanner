@@ -802,6 +802,41 @@ function timeNow() {
   return new Date().toLocaleTimeString();
 }
 
+function editScan(type, key, time) {
+  if (type === 'inv') {
+    const newVal = prompt('Edit Delivery No Barcode:', key);
+    if (newVal === null || newVal.trim() === '' || newVal === key) return;
+    const oldData = S.invScans[key];
+    delete S.invScans[key];
+    S.invScans[newVal.trim()] = oldData;
+  } else {
+    const scanIdx = S.boxScans.findIndex(s => s.soKey === key && s.time === time);
+    if (scanIdx === -1) return;
+    const scan = S.boxScans[scanIdx];
+    const newVal = prompt('Edit Box Barcode (SO#+Company+Location+Qty):', scan.raw);
+    if (newVal === null || newVal.trim() === '' || newVal === scan.raw) return;
+    
+    const parts = newVal.split('+');
+    if (parts.length < 2) {
+      alert('Scan the location');
+      return;
+    }
+    const soKey = parts[0].trim();
+    const qty = parseInt(parts[parts.length - 1], 10);
+    if (!soKey || isNaN(qty)) {
+      alert('Invalid barcode format');
+      return;
+    }
+    
+    scan.raw = newVal.trim();
+    scan.soKey = soKey;
+    scan.qty = qty;
+  }
+  renderAll();
+  debouncedSave();
+  showToast('Scan updated', 'ok');
+}
+
 // ═══════════════════════════════════════════════════════
 // RENDER FUNCTIONS
 // ═══════════════════════════════════════════════════════
@@ -939,8 +974,10 @@ function renderInvoiceTable() {
   tbody.innerHTML = rows.map(g => {
     const arrived = !!S.invScans[g.deliveryNo];
     const sc = S.invScans[g.deliveryNo];
-    const rowCls = arrived?'row-done':'row-miss';
-    const badge = arrived?'<span class="badge b-done">✅ ARRIVED</span>':'<span class="badge b-miss">❌ NOT ARRIVED</span>';
+    const isExcess = arrived && g.invoice === '(not in master)';
+    const rowCls = isExcess ? 'row-part' : (arrived ? 'row-done' : 'row-miss');
+    const badge = isExcess ? '<span class="badge b-part" style="background:var(--orange)">⚠️ EXCESS</span>' 
+                : (arrived ? '<span class="badge b-done">✅ ARRIVED</span>' : '<span class="badge b-miss">❌ NOT ARRIVED</span>');
     return `<tr class="${rowCls}">
       <td class="bold">${g.deliveryNo}</td>
       <td>${g.invoice}</td>
@@ -1043,7 +1080,7 @@ function renderRecent() {
   el.innerHTML = all.map(sc=>{
     if (sc.type==='inv') {
       const inMaster = S.master.some(r=>r.deliveryNo===sc.key);
-      return `<div class="ri green">
+      return `<div class="ri green" ondblclick="editScan('inv', '${sc.key}')" title="Double-click to edit">
         <div class="ri-top"><span>📄 ${sc.key}</span><span>${sc.time}</span></div>
         <div class="ri-sub">Delivery No ${inMaster?'✅ matched in master':'⚠ not in master'}</div>
       </div>`;
@@ -1054,7 +1091,7 @@ function renderRecent() {
       const done = shipQty>0 && total>=shipQty;
       const over = shipQty>0 && total>shipQty;
       const cls = over ? 'orange' : (done ? 'green' : 'red');
-      return `<div class="ri ${cls}">
+      return `<div class="ri ${cls}" ondblclick="editScan('box', '${sc.key}', '${sc.time}')" title="Double-click to edit">
         <div class="ri-top"><span>📦 ${sc.key}</span><span>${sc.time}</span></div>
         <div class="ri-sub">+${sc.qty} boxes | Total: ${total}/${shipQty||'?'}</div>
       </div>`;
@@ -1132,12 +1169,18 @@ function exportScanCSV() {
   const totals = getBoxTotals();
   const hdrs = ['SO# + Line No#','Location','Box Qty (this scan)','Running Total','Ship Qty','Status','Scan Time','Raw Barcode'];
   const rows = S.boxScans.map(sc=>{
-    const master = S.master.find(r=>r.soKey===sc.soKey);
+    const master = S.master.find(r=>r.soKey===sc.key);
     const total = totals[sc.soKey]||0;
     const bs = getBoxStatus(total,master?master.shipQty:0);
-    return [sc.soKey,sc.location||'',sc.qty,total,master?master.shipQty:'',bs.toUpperCase(),sc.time,sc.raw];
+    const status = bs.toUpperCase() + (total > (master ? master.shipQty : 0) ? ' (EXCESS)' : '');
+    return [sc.soKey,sc.location||'',sc.qty,total,master?master.shipQty:'',status,sc.time,sc.raw];
   });
-  downloadCSV('Inqube_ScanLog_'+dateStamp()+'.csv', toCSV(hdrs,rows));
+  // Also add invoice scans
+  Object.entries(S.invScans).forEach(([d, sc]) => {
+    const inMaster = S.master.some(r => r.deliveryNo === d);
+    rows.push(['INVOICE: ' + d, '', '', '', '', inMaster ? 'ARRIVED' : 'EXCESS', sc.time, sc.raw]);
+  });
+  downloadCSV('Inqube_Scan_Log_'+dateStamp()+'.csv', toCSV(hdrs,rows));
   showToast('Scan log exported', 'ok');
 }
 
@@ -1152,7 +1195,9 @@ function exportInvoiceCSV() {
   }
   const rows = Object.values(groups).map(g=>{
     const sc=S.invScans[g.deliveryNo];
-    return [g.deliveryNo,g.invoice,g.rbo,g.lines,g.shipQty,sc?'YES':'NO',sc?sc.time:''];
+    const isExcess = sc && g.invoice === '(not in master)';
+    const status = isExcess ? 'EXCESS' : (sc ? 'YES' : 'NO');
+    return [g.deliveryNo,g.invoice,g.rbo,g.lines,g.shipQty,status,sc?sc.time:''];
   });
   downloadCSV('Inqube_InvoiceCheck_'+dateStamp()+'.csv', toCSV(hdrs,rows));
   showToast('Invoice check exported', 'ok');
